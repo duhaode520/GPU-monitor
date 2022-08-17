@@ -5,14 +5,14 @@ import smtplib
 from email.mime.text import MIMEText 
 from email.utils import formataddr
 from configparser import ConfigParser
+import subprocess
 
 
 
-def mail(info, receivers):
+def mail(subject, info, receivers):
     msg = MIMEText(info, 'plain', 'utf-8')
     msg['From'] =formataddr([f"From {name}",sender])
 
-    subject = f'GPU in {name} is now available!'
     msg['Subject'] = subject
 
     server = smtplib.SMTP_SSL(mail_host, 465)
@@ -23,7 +23,7 @@ def mail(info, receivers):
     else:
         server.sendmail(mail_user, receivers, msg.as_string())
     server.quit()
-    print("SUCCESS")
+    print("mail sent")
 
 
 
@@ -49,8 +49,8 @@ else:
     threshold = int(threshold)
 mode = config.get('gpu', 'mode')
 if 'num' in config['gpu']:
-    num = config.get('gpu', 'num')
-    assert(num) # the number of available gpu is not 0
+    num = int(config.get('gpu', 'num'))
+    assert(num > 0) # the number of available gpu is not 0
 else:
     num = 1
 name = config.get('gpu', 'name')
@@ -67,6 +67,7 @@ if isinstance(threshold, list):
 successive_count = 0
 while True:
     flag = False # if the gpu is available
+    # flag = True
     usage = [0 for i in range(device_num)]
 
     available_count = 0
@@ -76,23 +77,47 @@ while True:
         meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
         usage[i] = int(meminfo.used/1024/1024) # show in MB
 
-        if int(meminfo.used/1024/1024) < thr:
+        if usage[i] < thr:
             available_count += 1
             if available_count >= num:
                 flag = True
                 break
     if flag : 
         if mode == 'monitor':
+            subject = f'GPU in {name} is now available!'
             info = '''
             GPU Usage :
-                    GPU 0: {} M
-                    GPU 1: {} M
-                    GPU 2: {} M
-                    GPU 3: {} M
             '''.format(usage[0], usage[1], usage[2], usage[3])
-            mail(info, receivers[0])
+            for i in range(device_num):
+                info += '''
+                    GPU {}: {} M
+                '''.format(i, usage[i])
+
+            mail(subject, info, receivers)
             successive_count += 1
             time.sleep(7200*successive_count) # sleep for 2 hours
+
+        if mode == 'arrange':
+            subject = f'GPU in {name} is now available!'
+            task_file = config.get('gpu', 'task_file')
+            p = subprocess.Popen(task_file, shell=True, 
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            info = '''
+            Successfully assign task {} to GPU
+            '''.format(task_file)
+            mail(subject, info, receivers)
+
+            # wait for the task to finish
+            return_code = p.wait()
+            stdout, stderr = p.communicate()
+            if return_code == 0:
+                mail("Task on GPU finished", 
+                    f"Task {task_file} finished", receivers)
+            else :
+                mail("Task on GPU failed", 
+                    stderr, receivers)
+            break
+
     else:
         successive_count = 0
         print("ALL BUSY NOW!!!!")
