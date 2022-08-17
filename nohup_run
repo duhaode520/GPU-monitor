@@ -1,0 +1,1 @@
+nohup python ./gpu_monitor_notify.py --allow-root > ./monitor.log 2>&1 &

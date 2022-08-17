@@ -99,12 +99,14 @@ while True:
 
         if mode == 'arrange':
             subject = f'GPU in {name} is now available!'
-            task_file = config.get('gpu', 'task_file')
-            p = subprocess.Popen(task_file, shell=True, 
+            task = config.get('gpu', 'task')
+            p = subprocess.Popen(task, shell=True, 
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             info = '''
-            Successfully assign task {} to GPU
-            '''.format(task_file)
+            Successfully assign task 
+                {} 
+                to GPU
+            '''.format(task)
             mail(subject, info, receivers)
 
             # wait for the task to finish
@@ -112,7 +114,7 @@ while True:
             stdout, stderr = p.communicate()
             if return_code == 0:
                 mail("Task on GPU finished", 
-                    f"Task {task_file} finished", receivers)
+                    f"Task \n{task}\n FINISHED", receivers)
             else :
                 mail("Task on GPU failed", 
                     stderr, receivers)
